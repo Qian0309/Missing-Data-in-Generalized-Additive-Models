@@ -1,0 +1,254 @@
+---
+title: "GAMs project"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r,echo = FALSE}
+library(mgcv)
+library(mice)
+library(missForest)
+library(MASS)
+library(ggplot2)
+library(randomForest)
+library(MVN)
+library(Hotelling)
+```
+
+```{r code=readLines("code.R"), eval=TRUE, echo=FALSE}
+# Do not change this code chunk
+# Load function definitions
+source("MP Functions.R")
+```
+
+## data simulation
+```{r data simulation,echo = FALSE}
+set.seed(27)
+error <- rnorm(n=1000,mean=0,sd=10)
+covmatrix1 <- matrix(data=c(1,0,0,0,1,0,0,0,1),nrow = 3)
+covmatrix2 <- matrix(data=c(rep(1,3),rep(2,3),rep(3,3)),nrow= 3)
+data1_3 <- mvrnorm(n=1000,mu=c(5,5,5),Sigma=covmatrix1)
+data4_6 <- mvrnorm(n=1000,mu=c(0,0.5,1),Sigma=covmatrix2)
+data7 <- rexp(n=1000,rate=0.5)
+data8 <- rpois(n=1000,lambda=3)
+data9 <- rbinom(n=1000,size=10,prob=0.5)
+data10 <- 2*data1_3[,1]+7*data4_6[,2]
+data11 <- rgamma(n=1000,shape=1,rate = 1)
+data12 <- rt(n=1000,df=10)
+XData <- cbind(data1_3,data4_6,data7,data8,data9,data10,data11,data12)
+M_Xdata <- as.matrix(XData)
+beta <- matrix(data=c(sample(100:10000,12)/1000),ncol=1)
+y <- M_Xdata %*% beta+error
+Data <- cbind(y,XData)
+colnames(Data) <- c("Y","X1","X2","X3","X4","X5","X6","X7","X8","X9","X10","X11","X12")
+```
+
+```{r}
+dat <- gamSim(1,n=300,scale=3)
+par(mfrow=c(1,4))
+plot(f0~x0,data = dat)
+plot(f1~x1,data = dat)
+plot(f2~x2,data = dat)
+plot(f3~x3,data = dat)
+plot(x1~x2,data = dat)
+plot(x1~x3,data = dat)
+plot(x1~x0,data = dat)
+```
+
+
+```{r}
+covmatrix1 <- matrix(data=c(1,0,0,0,1,0,0,0,1),nrow = 3)
+covmatrix2 <- matrix(data=c(rep(1,3),rep(2,3),rep(3,3)),nrow= 3)
+data1_3 <- mvrnorm(n=1000,mu=c(1,1,1),Sigma=covmatrix1)
+data4_6 <- mvrnorm(n=1000,mu=c(1,1,1),Sigma=covmatrix2)
+error <- rnorm(n=1000,mean=0,sd=1)
+x1 <- data1_3[,1]
+x2 <- data1_3[,2]
+x3 <- data1_3[,3]
+x4 <- data4_6[,1]
+x5 <- data4_6[,2]
+x6 <- data4_6[,3]
+x7 <- x1*(1-x1)+rnorm(100)*0.1
+x8 <- x5*(x5-5)*(x5+4)+rnorm(100)*0.1
+x9 <- x7*(10-x7)*(x7+2)+rnorm(100)*0.1
+```
+
+```{r}
+error <- rnorm(300)*0.01
+x1 <- runif(300)
+x2 <- (x1-0.3)*(x1-0.5)*(x1-0.7)+rnorm(300)*0.01 #x2~x1
+x3 <- (x2-0.5)*(x2-0.5)+rnorm(300)*0.01 #x3~x2
+x4 <- (x3-0.2)*(x3-0.5)^2*(x3-0.8)+rnorm(300)*0.01 #x4~x3
+x5 <- 3*x1+rnorm(300)*0.01 #x5~x1
+x6 <- runif(300)
+xdata <- cbind(x1,x2,x3,x4,x5,x6)
+colnames(xdata) <- c("X1","X2","X3","X4","X5","X6")
+
+par(mfrow=c(1,5))
+plot(x1~x2)
+plot(x2~x3)
+plot(x3~x4)
+plot(x1~x5)
+plot(x6~x1)
+
+f1 <- (x1)^3
+f2 <- (x2)^2
+f3 <- x3
+f4 <- (x4-0.1)*(x4-0.3)^2*(x4-0.7)
+f5 <- (x5)^(1/2)
+f6 <- (x6-0.3)*(x6-0.5)*(x6-0.7)
+
+#c <- cof(cbind(f1,f2,f3,f4,f5,f6))
+#f2 <- c[1]*(x2)^2+x2
+#f3 <- c[2]*x3
+#f4 <- c[3]*x4^2+x4
+#f5 <- c[4]*x5^(1/2)
+#f6 <- c[5]*(x6-0.3)*(x6-0.5)*(x6-0.7)
+
+par(mfrow=c(2,3))
+plot(f1~x1)
+plot(f2~x2)
+plot(f3~x3)
+plot(f4~x4)
+plot(f5~x5)
+plot(f6~x6)
+
+Y <- f1+f2+f3+f4+f5+f6+error
+EY <- f1+f2+f3+f4+f5+f6
+Data <- cbind(Y,x1,x2,x3,x4,x5,x6)
+colnames(Data) <- c("Y","X1","X2","X3","X4","X5","X6")
+
+# missing data
+Data.mis <- prodNA(xdata, noNA = 0.5)
+completedcase <- nrow(na.omit(Data.mis))
+##1
+ms_completeData <- as.data.frame(Data.mis)
+for(i in 1:ncol(ms_completeData)) {
+  ms_completeData[ , i][is.na(ms_completeData[ , i])] <- mean(ms_completeData[ , i], na.rm = TRUE)
+}
+as.matrix(ms_completeData)
+##2
+#You may skip removal of collinear variables at initialization by the remove_collinear flag.
+imputed_Data <- mice(Data.mis, method = 'pmm', diagnostics = FALSE , remove_collinear = FALSE, seed = 500)
+mi_completeData <- as.data.frame(complete(imputed_Data))
+as.matrix(mi_completeData)
+##3
+rf_completeData <- rfImpute(Y ~ ., Data.mis)[,2:7]
+as.matrix(rf_completeData)
+
+Data <- as.data.frame(Data)
+O <- gam(Y~s(X1)+s(X2)+s(X3)+s(X4)+s(X5)+s(X6),data=Data,method="REML")
+pO <- predict.gam(O,as.data.frame(xdata))
+#
+Me <- gam(Y~s(X1)+s(X2)+s(X3)+s(X4)+s(X5)+s(X6),data=ms_completeData,method="REML")
+TMe <- predict.gam(Me,type="terms",as.data.frame(xdata))
+plot(xdata[,2],TMe[,2])
+#
+pMe <- predict.gam(Me,as.data.frame(xdata))
+M <- gam(Y~s(X1)+s(X2)+s(X3)+s(X4)+s(X5)+s(X6),data=mi_completeData,method="REML")
+pM <- predict.gam(M,as.data.frame(xdata))
+rf <- gam(Y~s(X1)+s(X2)+s(X3)+s(X4)+s(X5)+s(X6),data=rf_completeData,method="REML")
+prf <- predict.gam(rf,as.data.frame(xdata))
+mse <- c(sum((pO-EY)^2),sum((pMe-EY)^2),sum((pM-EY)^2),sum((prf-EY)^2))
+```
+```{r test mvn and mean 删除}
+##
+#H0 (null): The variables not follow a multivariate normal distribution.
+#Ha (alternative): The variables follow a multivariate normal distribution.
+#result <- mvn(xdata,mvnTest = "hz")
+#result1 <- mvn(ms_completeData,mvnTest = "hz")
+#result2 <- mvn(mi_completeData,mvnTest = "hz")
+#result3 <- mvn(rf_completeData,mvnTest = "hz")
+#result$multivariateNormality$MVN
+#result1$multivariateNormality$MVN
+#result2$multivariateNormality$MVN
+#result3$multivariateNormality$MVN
+
+#hoteling t square distribution test
+#H0 mu same
+#Ha mu not same
+#t1 <- hotelling.stat(xdata,as.matrix(ms_completeData))$statistic
+#t2 <- hotelling.stat(xdata,as.matrix(mi_completeData))$statistic
+#t3 <- hotelling.stat(xdata,as.matrix(rf_completeData))$statistic
+```
+
+```{r}
+covmatrix2 <- matrix(data=c(rep(1,3),rep(2,3),rep(3,3)),nrow= 3)
+data4_6 <- mvrnorm(n=1000,mu=c(0,0.5,1),Sigma=covmatrix2)
+error <- rnorm(n=1000,mean=0,sd=1)
+x1 <- data4_6[,1]
+x2 <- data4_6[,2]
+x3 <- data4_6[,3]
+fx1 <- (x1)^3+(x1)^2+x1
+fx2 <- (x2)^2+x2
+fx3 <- x3
+
+c <- cof(cbind(fx1,fx2,fx3))
+fx2 <- c[1]*(x2)^2+x2
+fx3 <- c[2]*x3
+
+Y <- fx1+fx2+fx3+error
+
+xdata <- cbind(x1,x2,x3)
+colnames(xdata) <- c("X1","X2","X3")
+as.matrix(xdata)
+Data <- cbind(Y,x1,x2,x3)
+colnames(Data) <- c("Y","X1","X2","X3")
+assessment(Data, pop_dis,0.2)
+```
+
+```{r data drop}
+Data.mis <- prodNA(Data, noNA = 0.2)
+Data.mis[,1] <- y
+```
+
+```{r mean substitute}
+ms_completeData <- Data.mis
+for(i in 1:ncol(ms_completeData)) {
+  ms_completeData[ , i][is.na(ms_completeData[ , i])] <- mean(ms_completeData[ , i], na.rm = TRUE)
+}
+```
+
+```{r MICE}
+imputed_Data <- mice(Data.mis, m=1, maxit = 50, method = 'pmm', seed = 500)
+completeData <- complete(imputed_Data)
+```
+
+```{r random forest}
+rf.completedata <- rfImpute(Y ~ ., Data.mis)
+```
+
+```{r fit GAMs}
+#O <- gam(Y~s(X1)+s(X2)+s(X3)+s(X4)+s(X5)+s(X6)+s(X7)+s(X8,k=8)+s(X9,k=8)+s(X10)+s(X11)+s(X12),data=as.data.frame(Data),method="REML")
+#par(mfrow=c(2,6))
+#plot(O)
+
+#Me <- gam(Y~s(X1)+s(X2)+s(X3)+s(X4)+s(X5)+s(X6)+s(X7)+s(X8,k=8)+s(X9,k=8)+s(X10)+s(X11)+s(X12),data=as.data.frame(ms_completeData),method="REML")
+#par(mfrow=c(2,6))
+#plot(Me)
+
+#M <- gam(Y~s(X1)+s(X2)+s(X3)+s(X4)+s(X5)+s(X6)+s(X7)+s(X8,k=8)+s(X9,k=8)+s(X10)+s(X11)+s(X12),data=completeData,method="REML")
+#par(mfrow=c(2,6))
+#plot(M)
+
+#Rf <- gam(Y~s(X1)+s(X2)+s(X3)+s(X4)+s(X5)+s(X6)+s(X7)+s(X8,k=8)+s(X9,k=8)+s(X10)+s(X11)+s(X12),data=as.data.frame(rf.completedata),method="REML")
+#par(mfrow=c(2,6))
+#plot(Rf)
+```
+
+```{r Modelling Checking method1}
+#AIC(O,Me,M,Rf)
+#BIC(O,Me,M,Rf)
+
+```
+The best-fit model according to AIC is the one that explains the greatest amount of variation using the fewest possible independent variables.
+
