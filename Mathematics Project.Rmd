@@ -249,7 +249,7 @@ rf.completedata <- rfImpute(Y ~ ., Data.mis)
 #AIC(O,Me,M,Rf)
 #BIC(O,Me,M,Rf)
 #12345
-
+#23456
 ```
 The best-fit model according to AIC is the one that explains the greatest amount of variation using the fewest possible independent variables.
 
