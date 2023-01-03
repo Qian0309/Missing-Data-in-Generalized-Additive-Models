@@ -1,0 +1,202 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+```{r,echo = FALSE}
+library(mgcv)
+library(mice)
+library(missForest)
+library(MASS)
+library(ggplot2)
+library(randomForest)
+library(MVN)
+library(Hotelling)
+```
+
+```{r code=readLines("code.R"), eval=TRUE, echo=FALSE}
+# Do not change this code chunk
+# Load function definitions
+source("Gams_function.R")
+```
+
+
+```{r}
+n <- 300
+
+x1 <- runif(n, 0, 1)
+x2 <- x1 * 0.7 + runif(n, 0, 0.3)
+plot(x2~x1)
+x3 <- sin(pi * x2)* 0.7+ runif(n, 0, 0.3)
+plot(x3~x2)
+x4 <- 0.5*(cos(pi * (2.5*x2))+1)* 0.7+ runif(n, 0, 0.3)
+plot(x4~x2)
+mean(x4)
+x5 <- 0.5*(cos(pi * (3/2*x2))+1)* 0.7+ runif(n, 0, 0.3)
+plot(x5~x2)
+x6 <- rnorm(n, 0.7, 0.1)-0.1
+
+f1 <- 10*(x1-0.5)^2
+plot(f1~x1)
+f2 <- 2.5*x2
+plot(f2~x2)
+f3 <- (0.2 * x3^11 * (10 * (1 - x3))^6)*2.5/3
+plot(f3~x3)
+f4 <- 1/4*(0.2 * x4^11 * (10 * (1 - x4))^6 + 10 * 
+      (10 * x4)^3 * (1 - x4)^10)
+plot(f4~x4)
+f5 <- 2*sin(pi * x5)
+plot(f5~x5)
+f6 <- 4*x6^3
+plot(f6~x6)
+
+```
+
+```{r}
+Data <- gsim(3)
+colMeans(Data)
+```
+
+```{r}
+
+Test_rmse(Data, "mean", 0.4, 5,"T")
+Test_rmse(Data, "mice", 0.4, 5,"T")
+Test_rmse(Data, "rf", 0.4, 5,"T")
+```
+
+```{r Mean RMSE for each imputation method}
+
+unif_data <- gsim(3)
+
+# Mean rmse for variables after MEAN imputation
+mean_impute  <- Test_rmse(unif_data, "mean", 0.4, 10,"f")
+unif_Mean_rmse <- as.data.frame(t(colMeans(mean_impute )))
+rownames(unif_Mean_rmse) <- "Root Mean Squared Error"
+unif_Mean_rmse
+
+# Mean rmse for variables after MICE imputation
+mice_impute <- Test_rmse(unif_data, "mice", 0.4, 10,"f")
+unif_Mice_rmse <- as.data.frame(t(colMeans(mice_impute)))
+rownames(unif_Mice_rmse) <- "Root Mean Squared Error"
+unif_Mice_rmse
+
+# Mean rmse for variables after RANDOM FOREST imputation
+rf_impute <- Test_rmse(unif_data, "rf", 0.4, 10,"f")
+unif_RF_rmse <- as.data.frame(t(colMeans(rf_impute)))
+rownames(unif_RF_rmse) <- "Root Mean Squared Error"
+unif_RF_rmse
+
+mean_impute-rf_impute
+```
+
+
+```{r PLot Y RMSE vs. Missing proportions of data for "Uniform distributed data", warning=FALSE, results='hide', message=FALSE}
+
+# Create a list for several dropping proportions of the data
+Missdata_prop_list <- c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7)
+
+
+# Create a dataframe to store the mean RMSE for Random Forest Imputation method for each dropping proportions
+unif_df_mean_rmse <- data.frame(matrix(ncol = length(unif_data)/2 + 1, nrow = length(Missdata_prop_list)))
+unif_df_mice_rmse <- data.frame(matrix(ncol = length(unif_data)/2 + 1, nrow = length(Missdata_prop_list)))
+unif_df_rf_rmse <- data.frame(matrix(ncol = length(unif_data)/2 + 1, nrow = length(Missdata_prop_list)))
+
+unif_df_mean_upper <- data.frame(matrix(ncol = length(unif_data)/2 + 1, nrow = length(Missdata_prop_list)))
+unif_df_mice_upper <- data.frame(matrix(ncol = length(unif_data)/2 + 1, nrow = length(Missdata_prop_list)))
+unif_df_rf_upper <- data.frame(matrix(ncol = length(unif_data)/2 + 1, nrow = length(Missdata_prop_list)))
+
+unif_df_mean_lower <- data.frame(matrix(ncol = length(unif_data)/2 + 1, nrow = length(Missdata_prop_list)))
+unif_df_mice_lower <- data.frame(matrix(ncol = length(unif_data)/2 + 1, nrow = length(Missdata_prop_list)))
+unif_df_rf_lower <- data.frame(matrix(ncol = length(unif_data)/2 + 1, nrow = length(Missdata_prop_list)))
+
+# Loop through each dropping proportions for all three imputation methods
+for (i in 1:length(Missdata_prop_list)){
+  # Mean rmse for variables after MEAN imputation
+  unif_mean_impute <- Test_rmse(unif_data, "mean", Missdata_prop_list[i], 20,"f")
+
+  for (j in 1:length(unif_mean_impute)){
+    unif_df_mean_lower[i,j] <- mean(unif_mean_impute[,j] - 1.96*sd(unif_mean_impute[,j]) /         sqrt(length(unif_mean_impute[,j])))
+    unif_df_mean_upper[i,j] <- mean(unif_mean_impute[,j] + 1.96*sd(unif_mean_impute[,j]) /         sqrt(length(unif_mean_impute[,j])))
+    unif_df_mean_rmse[i,j] <- mean(unif_mean_impute[,j])
+  }
+  
+  # Mean rmse for variables after MICE imputation
+  unif_mice_impute <- Test_rmse(unif_data, "mice", Missdata_prop_list[i], 1 ,"f")
+  
+  for (j in 1:length(unif_mice_impute)){
+    unif_df_mice_lower[i,j] <- mean(unif_mice_impute[,j] - 1.96*sd(unif_mice_impute[,j]) /         sqrt(length(unif_mice_impute[,j])))
+    
+    unif_df_mice_upper[i,j] <- mean(unif_mice_impute[,j] + 1.96*sd(unif_mice_impute[,j]) /         sqrt(length(unif_mice_impute[,j])))
+    
+    unif_df_mice_rmse[i,j] <- mean(unif_mice_impute[,j])
+  }
+  
+  # Mean rmse for variables after RANDOM FOREST imputation
+  unif_rf_impute <- Test_rmse(unif_data, "rf", Missdata_prop_list[i], 20,"f")
+  
+  for (j in 1:length(unif_rf_impute)){
+    unif_df_rf_lower[i,j] <- mean(unif_rf_impute[,j] - 1.96*sd(unif_rf_impute[,j]) /         sqrt(length(unif_rf_impute[,j])))
+    
+    unif_df_rf_upper[i,j] <- mean(unif_rf_impute[,j] + 1.96*sd(unif_rf_impute[,j]) /         sqrt(length(unif_rf_impute[,j])))
+    
+    unif_df_rf_rmse[i,j] <- mean(unif_rf_impute[,j])
+  }
+}
+  #unif_df_mean_rmse[i,] <- as.data.frame(t(colMeans(unif_mean_impute)))
+
+unif_Y_prop <- data.frame(Missdata_prop=c(Missdata_prop_list, Missdata_prop_list, Missdata_prop_list), Y_rmse=c(unif_df_mean_rmse[,1], unif_df_mice_rmse[,1], unif_df_rf_rmse[,1]), lower_CI = c(unif_df_mean_lower[,1], unif_df_mice_lower[,1], unif_df_rf_lower[,1]), upper_CI = c(unif_df_mean_upper[,1], unif_df_mice_upper[,1], unif_df_rf_upper[,1]), Imputation_Methods=c(rep(c("mean", "mice", "random forest"), each = length(Missdata_prop_list))))
+
+ggplot(unif_Y_prop, aes(x=Missdata_prop, y=Y_rmse, color=Imputation_Methods)) + geom_line() + geom_ribbon(aes(ymin = lower_CI, ymax = upper_CI), linetype = 3, alpha = 0.1) + ggtitle(" Y_rmse vs. Missing Data Proportion") + xlab("Missing Data Proportion") + ylab("Y rmse")
+
+```
+
+
+
+```{r imputation rmse}
+
+Missdata_prop_list <- c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7)
+
+aa <- data.frame(matrix(0,ncol = 6, nrow = length(Missdata_prop_list)))
+bb <- data.frame(matrix(0,ncol = 6, nrow = length(Missdata_prop_list)))
+cc <- data.frame(matrix(0,ncol = 6, nrow = length(Missdata_prop_list)))
+loop <- 20
+y <- unif_data[,1]
+xdata <- unif_data[,2:7]
+x_rmse_11 <- rep(0,6)
+x_rmse_22 <- rep(0,6)
+x_rmse_33 <- rep(0,6)
+for (i in 1:length(Missdata_prop_list)){
+  for (z in 1:loop){
+    Data.miss <- prodNA(xdata, noNA = Missdata_prop_list[i])
+    # Mean rmse for variables after MEAN imputation
+    mean_imputedData <- as.data.frame(Data.miss)
+        for(j in 1:ncol(mean_imputedData)) {
+          mean_imputedData[ , j][is.na(mean_imputedData[ , j])] <- mean(mean_imputedData[ , j], na.rm = TRUE)
+        }
+    x_rmse_1 <- sqrt(colSums((mean_imputedData-xdata)^2)/400)
+    x_rmse_11 <- x_rmse_11 + x_rmse_1
+    
+    # Mean rmse for variables after MICE imputation
+    imputed_Data <- mice(Data.miss, method = 'pmm', diagnostics = FALSE , remove_collinear = FALSE, seed = 500)
+    mice_imputedData <- as.data.frame(complete(imputed_Data))
+    x_rmse_2 <- sqrt(colSums((mice_imputedData-xdata)^2)/400)
+    x_rmse_22 <- x_rmse_22 + x_rmse_2
+    
+    # Mean rmse for variables after RANDOM FOREST imputation
+    rf_imputedData <- rfImpute(Data.miss,y)
+    as.data.frame(rf_imputedData)
+    x_rmse_3 <- sqrt(colSums((rf_imputedData[,2:7]-xdata)^2)/400)
+    x_rmse_33 <- x_rmse_33 + x_rmse_3
+  }
+  aa[i,] <- x_rmse_11/loop
+  bb[i,] <- x_rmse_22/loop
+  cc[i,] <- x_rmse_33/loop
+}
+aa-bb
+aa-cc
+```
